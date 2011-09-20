@@ -269,7 +269,8 @@ class GraphiteZenossBridge
 	{
 		$MaxValue = 0;
 		$MinValue = 9999999999;
-
+		$StateTitle = $Title .'-ROC';
+		
 		foreach($this->MetricBundle[$Metric] as $Value)
 		{
 			if($Value != 'None' && $Value != "None\n")
