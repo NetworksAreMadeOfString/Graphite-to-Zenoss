@@ -34,7 +34,7 @@
 	 Clear 		(green) 	(0) Clear
 	
 	 */
-	include('./GraphiteZenossBridge.class.php');
+	include(dirname(__FILE__).'/GraphiteZenossBridge.class.php');
 	
 	$Credentials = array('zenoss_username' => 'none',
 						'zenoss_password' => 'none',
