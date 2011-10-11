@@ -45,9 +45,9 @@
 						'graphite_password' => null);
 	
 	$Metrics = array(
-			'Test 1' => array('Metric' => 'devices.servers.ded2581.goblin.items.read.roc', 'Min' => 100, 'Max' => 2000, 'ROC' => null, 'Severity' => 4),
-			'Test 2' => array('Metric' => 'sumSeries(datasift.meteor.*.*.active_connections)', 'Min' => 100, 'Max' => 2000, 'ROC' => null, 'Severity' => 4),
-			'Test 3' => array('Metric' => 'sumSeries(devices.servers.*.memcached.fido.cmd_get.roc)', 'Min' => 100, 'Max' => 2000, 'ROC' => null, 'Severity' => 4)
+			'Test 1' => array('Metric' => 'devices.servers.servername.load_avg', 'Min' => null, 'Max' => 2, 'ROC' => 1, 'Severity' => 4),
+			'Test 2' => array('Metric' => 'sumSeries(project.subproject.metric)', 'Min' => 100, 'Max' => 2000, 'ROC' => 500, 'Severity' => 3),
+			'Test 3' => array('Metric' => 'sumSeries(project.subproject2.metric)', 'Min' => 100, 'Max' => 2000, 'ROC' => null, 'Severity' => 2)
 	);
 	
 	$GraphiteZenossBridge = new GraphiteZenossBridge($Credentials,$Metrics);
