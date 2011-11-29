@@ -196,7 +196,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
 		{
 			print("! Undefined index for Max check $Metric\r\n");		
-			$this->SendAlert($Metric,"! Metric [ $Metric ] does not exist", 2, $Metric);
+			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
 			return;
 		}
 
