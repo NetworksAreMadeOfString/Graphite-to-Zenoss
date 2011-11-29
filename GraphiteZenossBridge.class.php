@@ -52,6 +52,12 @@ class GraphiteZenossBridge
 	private $failuresFile = "/tmp/failures.txt";
 
 	private $CurlHandle;
+
+	// For how many seconds do we consider metrics for alerting
+	private $MonitorWindow = 600;
+
+	// What size (in seconds ) window do we retrieve from Graphite (this is needed for functions that performs function on metrics in the past, e.g. movingAverage)
+	private $GrabWindow = 1800;
 	
 	/**
 	 * The default constructor
@@ -106,14 +112,15 @@ class GraphiteZenossBridge
 		//Populate the OldAlerts array with details from the last run
 		$this->ProcessStateFile(false);
 
-		$GraphiteQueryString = '/render/?from=-10minutes&rawData=true';
+		$GraphiteQueryString = '/render/?from=-' . $this->GrabWindow . 'seconds&rawData=true';
 		
-		//Make a massive query string so we only have to hit Graphite onece
+		//Make a massive query string so we only have to hit Graphite once
 		foreach($this->QueryBundle as $Title => $Config)
 		{
-			$GraphiteQueryString .= '&target=' . $Config['Metric'];
+			//Wrap each one with an alias of the md5 of the metric, so we have a deterministic response
+			$GraphiteQueryString .= '&target=alias(' . $Config['Metric'] . ',"' . md5($Config['Metric']) . '")';
 		}
-		
+
 		//Call Graphite
 		$this->MakeGraphiteRequest($GraphiteQueryString);
 
@@ -186,7 +193,14 @@ class GraphiteZenossBridge
 		//Any one metric can have up to 3 individual checks so we need to differentiate between them
 		$StateTitle = $Title .'-max';
 
-		foreach($this->MetricBundle[$Metric] as $Value)
+		if(!isset($this->MetricBundle[md5($Metric)]))
+		{
+			print("! Undefined index for Max check $Metric\r\n");		
+			$this->SendAlert($Metric,"! Metric [ $Metric ] does not exist", 2, $Metric);
+			return;
+		}
+
+		foreach($this->MetricBundle[md5($Metric)] as $Value)
 		{
 			//Check if Graphite is reporting the value 'None' which would mean
 			//that no values were present which is BAD
@@ -207,7 +221,7 @@ class GraphiteZenossBridge
 		//Check how many 'None' results were actually received and alert if neccessary
 		if($NoneCounter > $this->MaxNoneAllowed)
 		{
-			$this->SendNoneAlert($Title, $MetricName, $NoneCounter);
+			$this->SendNoneAlert($Title, $Metric, $NoneCounter);
 		}
 		else
 		{
@@ -229,7 +243,7 @@ class GraphiteZenossBridge
 				else
 				{
 					//The check isn't down now and wasn't down earlier
-					print("$Title is OK ( under $MaxValue ) and hasn't been down previously\r\n");
+					print(". $Title is OK ( under $MaxValue ) and hasn't been down previously\r\n");
 				}
 			}
 		}
@@ -252,7 +266,15 @@ class GraphiteZenossBridge
 		$NoneCounter = 0;
 		$StateTitle = $Title .'-min';
 
-		foreach($this->MetricBundle[$Metric] as $Value)
+		if(!isset($this->MetricBundle[md5($Metric)]))
+                {
+                        print("! Undefined index for Min check $Metric\r\n");
+			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+                        return;
+                }
+		
+
+		foreach($this->MetricBundle[md5($Metric)] as $Value)
 		{
 			if($Value != 'None' && $Value != "None\n")
 			{
@@ -289,7 +311,7 @@ class GraphiteZenossBridge
 				else
 				{
 					//The check isn't down now and wasn't down earlier
-					print("$Title is OK ( above $MinValue ) and hasn't been down previously\r\n");
+					print(". $Title is OK ( above $MinValue ) and hasn't been down previously\r\n");
 				}
 			}
 		}
@@ -312,7 +334,15 @@ class GraphiteZenossBridge
 		$MinValue = 9999999999;
 		$StateTitle = $Title .'-ROC';
 		
-		foreach($this->MetricBundle[$Metric] as $Value)
+		if(!isset($this->MetricBundle[md5($Metric)]))
+                {
+                        print("! Undefined index for ROC check $Metric\r\n");
+			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+                        return;
+                }
+
+		
+		foreach($this->MetricBundle[md5($Metric)] as $Value)
 		{
 			if($Value != 'None' && $Value != "None\n")
 			{
@@ -340,7 +370,7 @@ class GraphiteZenossBridge
 			else
 			{
 				//The check isn't down now and wasn't down earlier
-				print("$Title is OK ( within $Calc ) and hasn't been down previously\r\n");
+				print(". $Title is OK ( within $Calc ) and hasn't been down previously\r\n");
 			}
 		}
 	}
@@ -361,6 +391,7 @@ class GraphiteZenossBridge
 	{
 		$URL = $this->GraphiteURL . $GraphiteQueryString;
 
+		//print($URL);
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $URL);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -370,9 +401,15 @@ class GraphiteZenossBridge
 		if(isset($this->GraphiteUserName) && !empty($this->GraphiteUserName)  && isset($this->GraphitePassword) && !empty($this->GraphitePassword))
 		curl_setopt($ch, CURLOPT_USERPWD, $this->GraphiteUserName . ":" . $this->GraphitePassword);
 
-
 		$output = curl_exec($ch);
+		$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 		curl_close($ch);
+
+		if ($code != 200) {
+			echo "! Failed graphite request with HTTP code $code\n";
+			$this->SendGraphiteFailAlert();
+			exit();
+		}
 
 		$ArrayTest = explode("\n",$output);
 		if(isset($ArrayTest[1]) && !empty($ArrayTest[1]))
@@ -380,10 +417,20 @@ class GraphiteZenossBridge
 			$output = array();
 			foreach($ArrayTest as $Line)
 			{
-				$Temp = explode("|",$Line);
-				$LineDetails = explode(",", $Temp[0]);
-				if(isset($Temp[1]) && !empty($Temp[1]))
-				$output[$LineDetails[0]] = explode(",",$Temp[1]);
+				if ($Line === '') {
+					// ignore blank lines
+					continue;
+				}
+				if (preg_match('/^(.*),\d+,\d+,(\d+)\|(.*)/',$Line, $Matches)) {
+					$BucketSize = $Matches[2];
+					
+					//Calculate number of metrics we should keep so we only consider the last X seconds
+					$MetricsKeep = $this->MonitorWindow / $BucketSize;
+	
+					$output[$Matches[1]] = array_slice(explode(',', $Matches[3]), -$MetricsKeep);
+				} else {
+					echo "! Failed to parse line from Graphite: '$Line'\n";
+				}
 			}
 		}
 		else
@@ -423,8 +470,8 @@ class GraphiteZenossBridge
 	 */
 	private function SendMaxAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
-		print("Sending an alert that $Title ($Metric) is over $Trip at $Value\r\n");
-		$this->SendAlert($Title,"$Title is over its threshold of $Trip [ $Metric ]",$Severity);
+		print("> Sending an alert that $Title ($Metric) is over $Trip at $Value\r\n");
+		$this->SendAlert($Title,"$Title is over its threshold of $Trip [ $Metric ]",$Severity, $Metric,$Trip);
 		return 0;
 	}
 
@@ -441,8 +488,8 @@ class GraphiteZenossBridge
 	*/
 	private function SendMinAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
-		print("Sending an alert that $Title ($Metric) is under $Trip ($Value)\r\n");
-		$this->SendAlert($Title,"$Title is under its threshold of $Trip [ $Metric ]",$Severity);
+		print("< Sending an alert that $Title ($Metric) is under $Trip ($Value)\r\n");
+		$this->SendAlert($Title,"$Title is under its threshold of $Trip [ $Metric ]",$Severity , $Metric,$Trip);
 		return 0;
 	}
 
@@ -459,8 +506,8 @@ class GraphiteZenossBridge
 	*/
 	private function SendROCAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
-		print("Sending an alert that $Title ($Metric) is outside of $Trip ($Value)\r\n");
-		$this->SendAlert($Title,"$Title is outside its threshold of $Trip [ $Metric ]",$Severity);
+		print("R Sending an alert that $Title ($Metric) is outside of $Trip ($Value)\r\n");
+		$this->SendAlert($Title,"The ROC of $Title is outside its threshold of $Trip [ $Metric ]",$Severity, $Metric,$Trip);
 		return 0;
 	}
 
@@ -476,8 +523,8 @@ class GraphiteZenossBridge
 	 */
 	private function SendNoneAlert($Title, $Metric, $NoneCounter)
 	{
-		print("Sending an alert that $Title ($Metric) is reporting too many 'None' values: $NoneCounter\r\n");
-		$this->SendAlert($Title,"$Title is reporting too many 'None' values [ $Metric ] ($NoneCounter) [This alert will not auto clear]", 5); //Always 5 no matter what
+		print("N Sending an alert that $Title ($Metric) is reporting too many 'None' values: $NoneCounter\r\n");
+		$this->SendAlert($Title,"$Title is reporting too many 'None' values [ $Metric ] [This alert will not auto clear]", 5, $Metric); //Always 5 no matter what
 		return 0;
 	}
 
@@ -488,8 +535,8 @@ class GraphiteZenossBridge
 	 */
 	private function SendGraphiteFailAlert()
 	{
-		print("Sending an alert that the CURL request to Graphite failed too many times\r\n");
-		$this->SendAlert("GraphiteZenossBridge","The CURL requests to Graphite are failing! [This alert will not auto clear]", 5); //Always 5 no matter what
+		print("! Sending an alert that the CURL request to Graphite failed too many times\r\n");
+		$this->SendAlert("GraphiteZenossBridge","The CURL requests to Graphite are failing! [This alert will not auto clear]", 5, $Metric); //Always 5 no matter what
 		return 0;
 	}
 
@@ -500,7 +547,7 @@ class GraphiteZenossBridge
 	 */
 	private function SendClear($Title)
 	{
-		print("Clearing $Title\r\n");
+		print("C Clearing $Title\r\n");
 		$this->SendAlert($Title,"Clearing $Title",0);
 		return 0;
 	}
@@ -514,22 +561,28 @@ class GraphiteZenossBridge
 	 * @param int $Severity - THe Zenoss Severity
 	 * @param String $Device - Allows a check to override what Device this alert is raised against [ unused - defaults to Graphite ]
 	 */
-	private function SendAlert($Component, $Message, $Severity, $Device = 'Graphite')
+	private function SendAlert($Component, $Message, $Severity, $Metric = '', $Trip = 10, $Device = 'Graphite')
 	{
+		if(!empty($Metric))
+			$Message .= "\r\n" . $this->GraphiteURL . "/render/?target=$Metric&target=alias(threshold($Trip),\"Threshold\")&height=600&width=800&from=-2hours";
+
 		$Message = urlencode($Message);
 		$Severity = (int)$Severity;
 		$Component = urlencode($Component);
 		//error_reporting(E_ALL);
 		
 		//Old style
-		$URL = "http://". $this->ZenossUserName .":".$this->ZenossPassword."@".str_replace('http://','',$this->ZenossURL)."/zport/dmd/ZenEventManager/manage_addEvent?device=$Device&component=$Component&summary=$Message&severity=$Severity&eventClass=".$this->ZenossEventClass."&eventClassKey=GraphiteZenossBridge";
+		$URL = "http://". $this->ZenossUserName .":".$this->ZenossPassword."@".str_replace('http://','',$this->ZenossURL)."/zport/dmd/ZenEventManager/manage_addEvent?device=$Device&component=$Component&summary=$Message&severity=$Severity&eventClass=".urlencode($this->ZenossEventClass)."&eventClassKey=GraphiteZenossBridge";
+		//print("\t\t$URL\r\n");
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $URL);
 		curl_setopt($ch, CURLOPT_HEADER,0);
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt($ch, CURLOPT_USERPWD, $this->ZenossUserName . ":" . $this->ZenossPassword);
 		$data = curl_exec($ch);
+		//print($data);
 		curl_close($ch);
 		
 		/*
@@ -581,5 +634,3 @@ class GraphiteZenossBridge
 		//{"action":"EventsRouter","method":"add_event","data":[{"summary":"SummaryTest","device":"DeviceTest","component":"ComponentTest","severity":"Critical","evclasskey":"","evclass":""}],"type":"rpc","tid":470}
 	}
 }
-?>
-
