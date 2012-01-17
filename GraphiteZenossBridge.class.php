@@ -572,7 +572,7 @@ class GraphiteZenossBridge
 		//error_reporting(E_ALL);
 		
 		//Old style
-		$URL = "http://". $this->ZenossUserName .":".$this->ZenossPassword."@".str_replace('http://','',$this->ZenossURL)."/zport/dmd/ZenEventManager/manage_addEvent?device=$Device&component=$Component&summary=$Message&severity=$Severity&eventClass=".urlencode($this->ZenossEventClass)."&eventClassKey=GraphiteZenossBridge";
+		$URL = "https://". $this->ZenossUserName .":".$this->ZenossPassword."@".str_replace('http://','',$this->ZenossURL)."/zport/dmd/ZenEventManager/manage_addEvent?device=$Device&component=$Component&summary=$Message&severity=$Severity&eventClass=".urlencode($this->ZenossEventClass)."&eventClassKey=GraphiteZenossBridge";
 		//print("\t\t$URL\r\n");
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $URL);
