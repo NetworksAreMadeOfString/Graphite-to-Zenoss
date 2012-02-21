@@ -127,13 +127,13 @@ class GraphiteZenossBridge
 		//Now lets start finding stuff to check
 		foreach($this->QueryBundle as $Title => $Config)
 		{
-			if(isset($Config['Max']) && !empty($Config['Max']) && $Config['Max'] != null)
+			if(isset($Config['Max']) && $Config['Max'] != null)
 			$this->CheckForMaxValues($Title, $Config['Metric'], $Config['Max'], $Config['Severity']);
 
-			if(isset($Config['Min']) && !empty($Config['Min']) && $Config['Min'] != null)
+			if(isset($Config['Min']) && $Config['Min'] != null)
 			$this->CheckForMinValues($Title, $Config['Metric'], $Config['Min'], $Config['Severity']);
 
-			if(isset($Config['ROC']) && !empty($Config['ROC']) && $Config['ROC'] != null)
+			if(isset($Config['ROC']) && $Config['ROC'] != null)
 				$this->CheckROCValues($Title, $Config['Metric'], $Config['ROC'], $Config['Severity']);
 		}
 
