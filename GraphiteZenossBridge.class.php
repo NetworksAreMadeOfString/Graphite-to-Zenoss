@@ -113,13 +113,19 @@ class GraphiteZenossBridge
 		$this->ProcessStateFile(false);
 
 		$GraphiteQueryString = '/render/?from=-' . $this->GrabWindow . 'seconds&rawData=true';
-		
+
+		$Targets = array();
 		//Make a massive query string so we only have to hit Graphite once
 		foreach($this->QueryBundle as $Title => $Config)
 		{
+			$Id = md5($Config['Metric']);
+			echo " Adding $Id with query " . $Config['Metric'] . PHP_EOL;
+
 			//Wrap each one with an alias of the md5 of the metric, so we have a deterministic response
-			$GraphiteQueryString .= '&target=alias(' . $Config['Metric'] . ',"' . md5($Config['Metric']) . '")';
+			$Targets[$Id] = 'target=alias(' . $Config['Metric'] . ',"' . $Id . '")';
 		}
+
+		$GraphiteQueryString .= '&' . implode('&', $Targets);
 
 		//Call Graphite
 		$this->MakeGraphiteRequest($GraphiteQueryString);
@@ -422,12 +428,17 @@ class GraphiteZenossBridge
 					continue;
 				}
 				if (preg_match('/^(.*),\d+,\d+,(\d+)\|(.*)/',$Line, $Matches)) {
+					$MetricIdentifier = $Matches[1];
 					$BucketSize = $Matches[2];
 					
 					//Calculate number of metrics we should keep so we only consider the last X seconds
 					$MetricsKeep = $this->MonitorWindow / $BucketSize;
+
+					if (isset($output[$MetricIdentifier])) {
+						echo "! Metric returns multiple values for identifier $MetricIdentifier\n";
+					}
 	
-					$output[$Matches[1]] = array_slice(explode(',', $Matches[3]), -$MetricsKeep);
+					$output[$MetricIdentifier] = array_slice(explode(',', $Matches[3]), -$MetricsKeep);
 				} else {
 					echo "! Failed to parse line from Graphite: '$Line'\n";
 				}
