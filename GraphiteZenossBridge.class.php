@@ -133,13 +133,13 @@ class GraphiteZenossBridge
 		//Now lets start finding stuff to check
 		foreach($this->QueryBundle as $Title => $Config)
 		{
-			if(isset($Config['Max']) && $Config['Max'] != null)
-			$this->CheckForMaxValues($Title, $Config['Metric'], $Config['Max'], $Config['Severity']);
+			if(isset($Config['Max']) && $Config['Max'] !== null)
+				$this->CheckForMaxValues($Title, $Config['Metric'], $Config['Max'], $Config['Severity']);
 
-			if(isset($Config['Min']) && $Config['Min'] != null)
-			$this->CheckForMinValues($Title, $Config['Metric'], $Config['Min'], $Config['Severity']);
+			if(isset($Config['Min']) && $Config['Min'] !== null)
+				$this->CheckForMinValues($Title, $Config['Metric'], $Config['Min'], $Config['Severity']);
 
-			if(isset($Config['ROC']) && $Config['ROC'] != null)
+			if(isset($Config['ROC']) && $Config['ROC'] !== null)
 				$this->CheckROCValues($Title, $Config['Metric'], $Config['ROC'], $Config['Severity']);
 		}
 
@@ -194,7 +194,7 @@ class GraphiteZenossBridge
 	 */
 	private function CheckForMaxValues($Title, $Metric, $Threshold, $Severity = 2)
 	{
-		$MaxValue = 0;
+		$MaxValue = null;
 		$NoneCounter = 0;
 		//Any one metric can have up to 3 individual checks so we need to differentiate between them
 		$StateTitle = $Title .'-max';
@@ -212,8 +212,11 @@ class GraphiteZenossBridge
 			//that no values were present which is BAD
 			if($Value != 'None' && $Value != "None\n")
 			{
-				if((int)$Value > (int)$MaxValue)
-				$MaxValue = (int)$Value;
+				if (is_null($MaxValue)) {
+					$MaxValue = (int)$Value;
+				} else {
+					$MaxValue = max($MaxValue, (int)$Value);
+				}
 			}
 			else
 			{
@@ -268,7 +271,7 @@ class GraphiteZenossBridge
 	 */
 	function CheckForMinValues($Title, $Metric, $Threshold, $Severity = 2)
 	{
-		$MinValue = 999999;
+		$MinValue = null;
 		$NoneCounter = 0;
 		$StateTitle = $Title .'-min';
 
@@ -284,8 +287,11 @@ class GraphiteZenossBridge
 		{
 			if($Value != 'None' && $Value != "None\n")
 			{
-				if((int)$Value < (int)$MinValue)
-				$MinValue = (int)$Value;
+				if (is_null($MinValue)) {
+					$MinValue = (int)$Value;
+				} else {
+					$MinValue = min($MinValue, (int)$Value);
+				}
 			}
 			else
 			{
