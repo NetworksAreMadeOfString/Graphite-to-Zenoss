@@ -488,7 +488,8 @@ class GraphiteZenossBridge
 	private function SendMaxAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
 		print("> Sending an alert that $Title ($Metric) is over $Trip at $Value\r\n");
-		$this->SendAlert($Title,"$Title is over its threshold of $Trip [ $Metric ]",$Severity, $Metric,$Trip);
+		$Summary = "$Title is over its threshold: $Value / $Trip";
+		$this->SendAlert($Title,"$Summary\r\n$Metric",$Severity, $Metric, $Trip, $Summary);
 		return 0;
 	}
 
@@ -506,7 +507,8 @@ class GraphiteZenossBridge
 	private function SendMinAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
 		print("< Sending an alert that $Title ($Metric) is under $Trip ($Value)\r\n");
-		$this->SendAlert($Title,"$Title is under its threshold of $Trip [ $Metric ]",$Severity , $Metric,$Trip);
+		$Summary = "$Title is under its threshold: $Value / $Trip";
+		$this->SendAlert($Title,"$Summary [$Metric]",$Severity, $Metric, $Trip, $Summary);
 		return 0;
 	}
 
@@ -524,7 +526,8 @@ class GraphiteZenossBridge
 	private function SendROCAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
 		print("R Sending an alert that $Title ($Metric) is outside of $Trip ($Value)\r\n");
-		$this->SendAlert($Title,"The ROC of $Title is outside its threshold of $Trip [ $Metric ]",$Severity, $Metric,$Trip);
+		$Summary = "The ROC of $Title is outside its threshold: $Value / $Trip";
+		$this->SendAlert($Title,"$Summary [$Metric]",$Severity, $Metric, $Trip, $Summary);
 		return 0;
 	}
 
@@ -541,7 +544,8 @@ class GraphiteZenossBridge
 	private function SendNoneAlert($Title, $Metric, $NoneCounter)
 	{
 		print("N Sending an alert that $Title ($Metric) is reporting too many 'None' values: $NoneCounter\r\n");
-		$this->SendAlert($Title,"$Title is reporting too many 'None' values [ $Metric ] [This alert will not auto clear]", 5, $Metric); //Always 5 no matter what
+		$Summary = "$Title is reporting too many 'None' values: $NoneCounter";
+		$this->SendAlert($Title,"$Summary [$Metric]", 5, $Metric, null, $Summary);
 		return 0;
 	}
 
@@ -553,7 +557,7 @@ class GraphiteZenossBridge
 	private function SendGraphiteFailAlert()
 	{
 		print("! Sending an alert that the CURL request to Graphite failed too many times\r\n");
-		$this->SendAlert("GraphiteZenossBridge","The CURL requests to Graphite are failing! [This alert will not auto clear]", 5, $Metric); //Always 5 no matter what
+		$this->SendAlert("GraphiteZenossBridge","The CURL requests to Graphite are failing!", 5, $Metric); //Always 5 no matter what
 		return 0;
 	}
 
@@ -578,18 +582,28 @@ class GraphiteZenossBridge
 	 * @param int $Severity - THe Zenoss Severity
 	 * @param String $Device - Allows a check to override what Device this alert is raised against [ unused - defaults to Graphite ]
 	 */
-	private function SendAlert($Component, $Message, $Severity, $Metric = '', $Trip = 10, $Device = 'Graphite')
+	private function SendAlert($Component, $Message, $Severity, $Metric = '', $Trip = null, $Summary = null)
 	{
-		if(!empty($Metric))
+		if(!empty($Metric)) {
+			if (is_null($Trip))
+				$Trip = 10;
 			$Message .= "\r\n" . $this->GraphiteURL . "/render/?target=$Metric&target=alias(threshold($Trip),\"Threshold\")&height=600&width=800&from=-2hours";
+		}
 
 		$Message = urlencode($Message);
+		
+		if (is_null($Summary)) {
+			$Summary === $Message;
+		} else {
+			$Summary = urlencode($Summary);
+		}
+
 		$Severity = (int)$Severity;
 		$Component = urlencode($Component);
-		//error_reporting(E_ALL);
+		$Device = 'Graphite';
 		
 		//Old style
-		$URL = "https://". $this->ZenossUserName .":".$this->ZenossPassword."@".str_replace('http://','',$this->ZenossURL)."/zport/dmd/ZenEventManager/manage_addEvent?device=$Device&component=$Component&summary=$Message&severity=$Severity&eventClass=".urlencode($this->ZenossEventClass)."&eventClassKey=GraphiteZenossBridge";
+		$URL = "https://". $this->ZenossUserName .":".$this->ZenossPassword."@".str_replace('http://','',$this->ZenossURL)."/zport/dmd/ZenEventManager/manage_addEvent?device=$Device&component=$Component&summary=$Summary&message=$Message&severity=$Severity&eventClass=".urlencode($this->ZenossEventClass)."&eventKey=GraphiteZenossBridge";
 		//print("\t\t$URL\r\n");
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $URL);
