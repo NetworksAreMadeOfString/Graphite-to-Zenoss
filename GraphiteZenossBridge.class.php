@@ -513,7 +513,7 @@ class GraphiteZenossBridge
 	private function SendMaxAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
 		print("> Sending an alert that $Title ($Metric) is over $Trip at $Value\r\n");
-		$Summary = "$Title is over its threshold: $Value / $Trip";
+		$Summary = "$Title is over its threshold: " . number_format($Value) . ' / ' . number_format($Trip);
 		$this->SendAlert($Title,"$Summary\r\n$Metric",$Severity, $Metric, $Trip, $Summary);
 		return 0;
 	}
@@ -532,7 +532,7 @@ class GraphiteZenossBridge
 	private function SendMinAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
 		print("< Sending an alert that $Title ($Metric) is under $Trip ($Value)\r\n");
-		$Summary = "$Title is under its threshold: $Value / $Trip";
+		$Summary = "$Title is under its threshold: " . number_format($Value) . ' / ' . number_format($Trip);
 		$this->SendAlert($Title,"$Summary [$Metric]",$Severity, $Metric, $Trip, $Summary);
 		return 0;
 	}
@@ -551,7 +551,7 @@ class GraphiteZenossBridge
 	private function SendROCAlert($Title, $Value, $Trip, $Metric, $Severity = 2)
 	{
 		print("R Sending an alert that $Title ($Metric) is outside of $Trip ($Value)\r\n");
-		$Summary = "The ROC of $Title is outside its threshold: $Value / $Trip";
+		$Summary = "The ROC of $Title is outside its threshold: " . number_format($Value) . ' / ' . number_format($Trip);
 		$this->SendAlert($Title,"$Summary [$Metric]",$Severity, $Metric, $Trip, $Summary);
 		return 0;
 	}
