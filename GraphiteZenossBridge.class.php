@@ -133,14 +133,18 @@ class GraphiteZenossBridge
 		//Now lets start finding stuff to check
 		foreach($this->QueryBundle as $Title => $Config)
 		{
-			if(isset($Config['Max']) && $Config['Max'] !== null)
-				$this->CheckForMaxValues($Title, $Config['Metric'], $Config['Max'], $Config['Severity']);
+			// First check to see if metric has too many None values
+			if ($this->CheckForNoneValues($Title, $Config['Metric'])) {
+				// Below threshold, perform checks
+				if(isset($Config['Max']) && $Config['Max'] !== null)
+					$this->CheckForMaxValues($Title, $Config['Metric'], $Config['Max'], $Config['Severity']);
 
-			if(isset($Config['Min']) && $Config['Min'] !== null)
-				$this->CheckForMinValues($Title, $Config['Metric'], $Config['Min'], $Config['Severity']);
+				if(isset($Config['Min']) && $Config['Min'] !== null)
+					$this->CheckForMinValues($Title, $Config['Metric'], $Config['Min'], $Config['Severity']);
 
-			if(isset($Config['ROC']) && $Config['ROC'] !== null)
-				$this->CheckROCValues($Title, $Config['Metric'], $Config['ROC'], $Config['Severity']);
+				if(isset($Config['ROC']) && $Config['ROC'] !== null)
+					$this->CheckROCValues($Title, $Config['Metric'], $Config['ROC'], $Config['Severity']);
+			}
 		}
 
 		//Write out the state file
@@ -180,6 +184,50 @@ class GraphiteZenossBridge
 			}
 		}
 	}
+	/**
+	 * Checks the metricbundle for the key $Metric and then checks to see
+	 * if it has returned too many 'None' values
+	 *
+	 * @param String $Title - The friendly name of the test
+	 * @param String $Metric - The graphite metric being tested a.b.c.foo.bar
+	 * @param int $Severity - What severity level to send to Zenoss
+	 */
+	private function CheckForNoneValues($Title, $Metric, $Severity = 5)
+	{
+		$NoneCounter = 0;
+		$StateTitle = $Title .'-none';
+
+		if(!isset($this->MetricBundle[md5($Metric)]))
+		{
+			print("! Undefined index for Max check $Metric\r\n");
+			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+			return false;
+		}
+
+		foreach($this->MetricBundle[md5($Metric)] as $Value)
+		{
+			//Check if Graphite is reporting the value 'None' which would mean
+			//that no values were present which is BAD
+			if(trim($Value) === 'None')
+				$NoneCounter++;
+		}
+
+		//Check how many 'None' results were actually received and alert if neccessary
+		if($NoneCounter > $this->MaxNoneAllowed)
+		{
+			$this->SendNoneAlert($Title, $Metric, $NoneCounter);
+
+			//Add to the state array (for later saving to state file)
+			$this->Alerts[$StateTitle] = $this->Date;
+
+			return false;
+		} elseif(isset($this->OldAlerts[$StateTitle]) && !empty($this->OldAlerts[$StateTitle])){
+			$this->SendClear($Title);
+		}
+		
+		// below threshold, ok to continue
+		return true;
+	}
 
 	/**
 	 * Checks the metricbundle for the key $Metric and then evaluates the values against
@@ -195,7 +243,6 @@ class GraphiteZenossBridge
 	private function CheckForMaxValues($Title, $Metric, $Threshold, $Severity = 2)
 	{
 		$MaxValue = null;
-		$NoneCounter = 0;
 		//Any one metric can have up to 3 individual checks so we need to differentiate between them
 		$StateTitle = $Title .'-max';
 
@@ -208,52 +255,36 @@ class GraphiteZenossBridge
 
 		foreach($this->MetricBundle[md5($Metric)] as $Value)
 		{
-			//Check if Graphite is reporting the value 'None' which would mean
-			//that no values were present which is BAD
-			if($Value != 'None' && $Value != "None\n")
-			{
-				if (is_null($MaxValue)) {
-					$MaxValue = (int)$Value;
-				} else {
-					$MaxValue = max($MaxValue, (int)$Value);
-				}
-			}
+			// ignore None values
+			if(trim($Value) === 'None')
+				continue;
+			
+			if (is_null($MaxValue))
+				$MaxValue = (int)$Value;
 			else
-			{
-				//Due to race conditions there is the possibility that the script will run
-				//seconds before Graphite has the data for this minute so there could always
-				//be at least 1 none so we increment a counter and then evaluate it later
-				$NoneCounter++;
-			}
+				$MaxValue = max($MaxValue, (int)$Value);
 		}
 
-		//Check how many 'None' results were actually received and alert if neccessary
-		if($NoneCounter > $this->MaxNoneAllowed)
+		
+		if($MaxValue > $Threshold)
 		{
-			$this->SendNoneAlert($Title, $Metric, $NoneCounter);
+			//Send Alert
+			$this->SendMaxAlert($Title,$MaxValue,$Threshold,$Metric, $Severity);
+
+			//Add to the state array (for later saving to state file)
+			$this->Alerts[$StateTitle] = $this->Date;
 		}
 		else
 		{
-			if($MaxValue > $Threshold)
+			//Send clear if we've previously alerted on this
+			if(isset($this->OldAlerts[$StateTitle]) && !empty($this->OldAlerts[$StateTitle]))
 			{
-				//Send Alert
-				$this->SendMaxAlert($Title,$MaxValue,$Threshold,$Metric, $Severity);
-
-				//Add to the state array (for later saving to state file)
-				$this->Alerts[$StateTitle] = $this->Date;
+				$this->SendClear($Title);
 			}
 			else
 			{
-				//Send clear if we've previously alerted on this
-				if(isset($this->OldAlerts[$StateTitle]) && !empty($this->OldAlerts[$StateTitle]))
-				{
-					$this->SendClear($Title);
-				}
-				else
-				{
-					//The check isn't down now and wasn't down earlier
-					print(". $Title is OK ( under $MaxValue ) and hasn't been down previously\r\n");
-				}
+				//The check isn't down now and wasn't down earlier
+				print(". $Title is OK ( under $MaxValue ) and hasn't been down previously\r\n");
 			}
 		}
 	}
@@ -272,59 +303,48 @@ class GraphiteZenossBridge
 	function CheckForMinValues($Title, $Metric, $Threshold, $Severity = 2)
 	{
 		$MinValue = null;
-		$NoneCounter = 0;
 		$StateTitle = $Title .'-min';
 
 		if(!isset($this->MetricBundle[md5($Metric)]))
                 {
                         print("! Undefined index for Min check $Metric\r\n");
-			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+						$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
                         return;
                 }
 		
 
 		foreach($this->MetricBundle[md5($Metric)] as $Value)
 		{
-			if($Value != 'None' && $Value != "None\n")
-			{
-				if (is_null($MinValue)) {
-					$MinValue = (int)$Value;
-				} else {
-					$MinValue = min($MinValue, (int)$Value);
-				}
-			}
+			// ignore None values
+			if(trim($Value) === 'None')
+				continue;
+			
+			if (is_null($MinValue))
+				$MinValue = (int)$Value;
 			else
-			{
-				$NoneCounter++;
-			}
+				$MinValue = min($MinValue, (int)$Value);			
 		}
 
-		if($NoneCounter > $this->MaxNoneAllowed)
+		
+		if($MinValue < $Threshold)
 		{
-			$this->SendNoneAlert($Title, $Metric, $NoneCounter);
+			//Send Alert
+			$this->SendMinAlert($Title,$MinValue,$Threshold,$Metric, $Severity);
+
+			//Add to the state array (for later saving to file)
+			$this->Alerts[$StateTitle] = $this->Date;
 		}
 		else
 		{
-			if($MinValue < $Threshold)
+			//Send clear if we've previously alerted on this
+			if(isset($this->OldAlerts[$StateTitle]) && !empty($this->OldAlerts[$StateTitle]))
 			{
-				//Send Alert
-				$this->SendMinAlert($Title,$MinValue,$Threshold,$Metric, $Severity);
-
-				//Add to the state array (for later saving to file)
-				$this->Alerts[$StateTitle] = $this->Date;
+				$this->SendClear($Title);
 			}
 			else
 			{
-				//Send clear if we've previously alerted on this
-				if(isset($this->OldAlerts[$StateTitle]) && !empty($this->OldAlerts[$StateTitle]))
-				{
-					$this->SendClear($Title);
-				}
-				else
-				{
-					//The check isn't down now and wasn't down earlier
-					print(". $Title is OK ( above $MinValue ) and hasn't been down previously\r\n");
-				}
+				//The check isn't down now and wasn't down earlier
+				print(". $Title is OK ( above $MinValue ) and hasn't been down previously\r\n");
 			}
 		}
 	}
@@ -342,28 +362,33 @@ class GraphiteZenossBridge
 	*/
 	private function CheckROCValues($Title, $Metric, $Threshold, $Severity = 2)
 	{
-		$MaxValue = 0;
-		$MinValue = 9999999999;
+		$MaxValue = null;
+		$MinValue = null;
 		$StateTitle = $Title .'-ROC';
 		
 		if(!isset($this->MetricBundle[md5($Metric)]))
                 {
                         print("! Undefined index for ROC check $Metric\r\n");
-			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+						$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
                         return;
                 }
 
 		
 		foreach($this->MetricBundle[md5($Metric)] as $Value)
 		{
-			if($Value != 'None' && $Value != "None\n")
-			{
-				if((int)$Value > (int)$MaxValue)
-					$MaxValue = (int)$Value;
+			// ignore None values
+			if(trim($Value) === 'None')
+				continue;
 
-				if((int)$Value < (int)$MinValue)
-					$MinValue = (int)$Value;
-			}
+			if (is_null($MaxValue))
+				$MaxValue = (int)$Value;
+			else
+				$MaxValue = max($MaxValue, (int)$Value);
+
+			if (is_null($MinValue))
+				$MinValue = (int)$Value;
+			else
+				$MinValue = min($MinValue, $Value);
 		}
 
 		$Calc = (int)($MaxValue - $MinValue);
