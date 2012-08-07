@@ -612,7 +612,10 @@ class GraphiteZenossBridge
 		if(!empty($Metric)) {
 			if (is_null($Trip))
 				$Trip = 10;
-			$Message .= "\r\n" . $this->GraphiteURL . "/render/?target=$Metric&target=alias(threshold($Trip),\"Threshold\")&height=600&width=800&from=-2hours";
+
+			$url .= $this->GraphiteURL . "/render/?target=$Metric&target=alias(threshold($Trip),\"Threshold\")&height=300&width=500&from=-2hours";
+			$Message .= "\r\n<br /><img src='$url' />";
+			$Message .= "\r\n<br /><a href='$url' target='_blank'>$url</a>";
 		}
 
 		$Message = urlencode($Message);
