@@ -200,7 +200,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
 		{
 			print("! Undefined index for Max check $Metric\r\n");
-			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+			$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
 			return false;
 		}
 
@@ -249,7 +249,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
 		{
 			print("! Undefined index for Max check $Metric\r\n");		
-			$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+			$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
 			return;
 		}
 
@@ -308,7 +308,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
                 {
                         print("! Undefined index for Min check $Metric\r\n");
-						$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+						$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
                         return;
                 }
 		
@@ -369,7 +369,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
                 {
                         print("! Undefined index for ROC check $Metric\r\n");
-						$this->SendAlert($Metric,"Metric [ $Metric ] does not exist", 2, $Metric);
+						$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
                         return;
                 }
 
@@ -609,6 +609,11 @@ class GraphiteZenossBridge
 	 */
 	private function SendAlert($Component, $Message, $Severity, $Metric = '', $Trip = null, $Summary = null)
 	{
+		// if summary was not specifed set it to message, but before we (may) add HTML tags below for $Metric to message
+		if (is_null($Summary)) {
+			$Summary = $Message;
+		}
+
 		if(!empty($Metric)) {
 			if (is_null($Trip))
 				$Trip = 10;
@@ -619,13 +624,8 @@ class GraphiteZenossBridge
 		}
 
 		$Message = urlencode($Message);
+		$Summary = urlencode($Summary);
 		
-		if (is_null($Summary)) {
-			$Summary === $Message;
-		} else {
-			$Summary = urlencode($Summary);
-		}
-
 		$Severity = (int)$Severity;
 		$Component = urlencode($Component);
 		$Device = 'Graphite';
