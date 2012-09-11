@@ -200,7 +200,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
 		{
 			print("! Undefined index for Max check $Metric\r\n");
-			$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
+			$this->SendAlert($Title, "Metric [ $Metric ] does not exist", $Severity, $Metric);
 			return false;
 		}
 
@@ -249,7 +249,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
 		{
 			print("! Undefined index for Max check $Metric\r\n");		
-			$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
+			$this->SendAlert($Title, "Metric [ $Metric ] does not exist", $Severity, $Metric);
 			return;
 		}
 
@@ -308,7 +308,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
                 {
                         print("! Undefined index for Min check $Metric\r\n");
-						$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
+						$this->SendAlert($Title, "Metric [ $Metric ] does not exist", $Severity, $Metric);
                         return;
                 }
 		
@@ -369,7 +369,7 @@ class GraphiteZenossBridge
 		if(!isset($this->MetricBundle[md5($Metric)]))
                 {
                         print("! Undefined index for ROC check $Metric\r\n");
-						$this->SendAlert($Title, "Metric [ $Metric ] does not exist", 2, $Metric);
+						$this->SendAlert($Title, "Metric [ $Metric ] does not exist", $Severity, $Metric);
                         return;
                 }
 
