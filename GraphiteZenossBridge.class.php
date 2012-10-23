@@ -215,7 +215,7 @@ class GraphiteZenossBridge
 		//Check how many 'None' results were actually received and alert if neccessary
 		if($NoneCounter > $this->MaxNoneAllowed)
 		{
-			$this->SendNoneAlert($Title, $Metric, $NoneCounter);
+			$this->SendNoneAlert($Title, $Metric, $NoneCounter, $Severity);
 
 			//Add to the state array (for later saving to state file)
 			$this->Alerts[$StateTitle] = $this->Date;
@@ -566,11 +566,11 @@ class GraphiteZenossBridge
 	 * @param String $Metric - The graphite Metric URI
 	 * @param int $NoneCounter Number of 'None' responses encountered
 	 */
-	private function SendNoneAlert($Title, $Metric, $NoneCounter)
+	private function SendNoneAlert($Title, $Metric, $NoneCounter, $Severity = 5)
 	{
 		print("N Sending an alert that $Title ($Metric) is reporting too many 'None' values: $NoneCounter\r\n");
 		$Summary = "$Title is reporting too many 'None' values: $NoneCounter";
-		$this->SendAlert($Title,"$Summary [$Metric]", 5, $Metric, null, $Summary);
+		$this->SendAlert($Title,"$Summary [$Metric]", $Severity, $Metric, null, $Summary);
 		return 0;
 	}
 
