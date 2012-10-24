@@ -134,7 +134,7 @@ class GraphiteZenossBridge
 		foreach($this->QueryBundle as $Title => $Config)
 		{
 			// First check to see if metric has too many None values
-			if ($this->CheckForNoneValues($Title, $Config['Metric'])) {
+			if ($this->CheckForNoneValues($Title, $Config['Metric'], $Config['Severity'])) {
 				// Below threshold, perform checks
 				if(isset($Config['Max']) && $Config['Max'] !== null)
 					$this->CheckForMaxValues($Title, $Config['Metric'], $Config['Max'], $Config['Severity']);
