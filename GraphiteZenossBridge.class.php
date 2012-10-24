@@ -86,6 +86,12 @@ class GraphiteZenossBridge
 		$this->ZenossURL = $CredentialsBundle['zenoss_url'];
 		$this->GraphiteURL = $CredentialsBundle['graphite_url'];
 
+		if (isset($CredentialsBundle['graphite_url_vanity'])) {
+			$this->GraphiteURLVanity = $CredentialsBundle['graphite_url_vanity'];
+		} else {
+			$this->GraphiteURLVanity = $CredentialsBundle['graphite_url'];
+		}
+
 		//These are optional if people are using HTTP basic auth to protect Graphite
 		if(isset($CredentialsBundle['graphite_username']) && !empty($CredentialsBundle['graphite_username']))
 		$this->GraphiteUserName = $CredentialsBundle['graphite_username'];
@@ -618,7 +624,7 @@ class GraphiteZenossBridge
 			if (is_null($Trip))
 				$Trip = 10;
 
-			$url = $this->GraphiteURL . "/render/?target=$Metric&target=alias(threshold($Trip),\"Threshold\")&height=300&width=500&from=-2hours";
+			$url = $this->GraphiteURLVanity . "/render/?target=$Metric&target=alias(threshold($Trip),\"Threshold\")&height=300&width=500&from=-2hours";
 			$Message .= "\r\n<br /><img src='$url' />";
 			$Message .= "\r\n<br /><a href='$url' target='_blank'>$url</a>";
 		}
